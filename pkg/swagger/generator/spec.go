@@ -32,21 +32,21 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func (g *GenOpts) loadSpec() (*loads.Document, error) {
+func (opts *GenOpts) loadSpec() (*loads.Document, error) {
 	// Load spec document
-	specDoc, err := loads.Spec(g.Spec)
+	specDoc, err := loads.Spec(opts.Spec)
 	if err != nil {
 		return nil, err
 	}
 	return specDoc, nil
 }
 
-func (g *GenOpts) validateSpec(specDoc loads.Document) error {
-	log.Printf("validating spec %v", g.Spec)
+func (opts *GenOpts) validateSpec(specDoc loads.Document) error {
+	log.Printf("validating spec %v", opts.Spec)
 	validationErrors := validate.Spec(&specDoc, strfmt.Default)
 	if validationErrors != nil {
 		str := fmt.Sprintf("The swagger spec at %q is invalid against swagger specification %s. see errors :\n",
-			g.Spec, specDoc.Version())
+			opts.Spec, specDoc.Version())
 		for _, desc := range validationErrors.(*swaggererrors.CompositeError).Errors {
 			str += fmt.Sprintf("- %s\n", desc)
 		}
@@ -55,7 +55,7 @@ func (g *GenOpts) validateSpec(specDoc loads.Document) error {
 	return nil
 }
 
-func (g *GenOpts) flattenSpec() (*loads.Document, error) {
+func (opts *GenOpts) flattenSpec() (*loads.Document, error) {
 	// Flatten spec
 	//
 	// Some preprocessing is required before codegen
@@ -79,16 +79,16 @@ func (g *GenOpts) flattenSpec() (*loads.Document, error) {
 	//  - name duplicates may occur and result in compilation failures
 	//
 	// The right place to fix these shortcomings is go-openapi/analysis.
-	specDoc, err := g.loadSpec()
+	specDoc, err := opts.loadSpec()
 	if err != nil {
 		return nil, err
 	}
-	g.FlattenOpts.BasePath = specDoc.SpecFilePath()
-	g.FlattenOpts.Spec = analysis.New(specDoc.Spec())
+	opts.FlattenOpts.BasePath = specDoc.SpecFilePath()
+	opts.FlattenOpts.Spec = analysis.New(specDoc.Spec())
 
-	g.printFlattenOpts()
+	opts.printFlattenOpts()
 
-	if err := analysis.Flatten(*g.FlattenOpts); err != nil {
+	if err := analysis.Flatten(*opts.FlattenOpts); err != nil {
 		return nil, err
 	}
 
@@ -96,19 +96,19 @@ func (g *GenOpts) flattenSpec() (*loads.Document, error) {
 	return specDoc, nil
 }
 
-func (g *GenOpts) analyzeSpec() (*loads.Document, *analysis.Spec, error) {
+func (opts *GenOpts) analyzeSpec() (*loads.Document, *analysis.Spec, error) {
 	// preprocess: add x-order to properties
-	if g.KeepOrder {
-		g.Spec = WithXOrder(g.Spec, AddXOrderOnProperty)
+	if opts.KeepOrder {
+		opts.Spec = WithXOrder(opts.Spec, AddXOrderOnProperty)
 	}
 
 	// load spec document and validate spec if needed
-	specDoc, err := g.loadSpec()
+	specDoc, err := opts.loadSpec()
 	if err != nil {
 		return nil, nil, err
 	}
-	if g.ValidateSpec {
-		err = g.validateSpec(*specDoc)
+	if opts.ValidateSpec {
+		err = opts.validateSpec(*specDoc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -116,12 +116,12 @@ func (g *GenOpts) analyzeSpec() (*loads.Document, *analysis.Spec, error) {
 
 	// preprocess: add x-order to maps in "default" & "example" fields
 	// this logic should run after spec validation, since x-extensions are not allowed on "default" & "example" fields
-	if g.KeepOrder {
-		g.Spec = WithXOrder(g.Spec, AddXOrderOnDefaultExample)
+	if opts.KeepOrder {
+		opts.Spec = WithXOrder(opts.Spec, AddXOrderOnDefaultExample)
 	}
 
 	// flatten spec
-	specDoc, err = g.flattenSpec()
+	specDoc, err = opts.flattenSpec()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -132,12 +132,12 @@ func (g *GenOpts) analyzeSpec() (*loads.Document, *analysis.Spec, error) {
 	return specDoc, analyzed, nil
 }
 
-func (g *GenOpts) printFlattenOpts() {
+func (opts *GenOpts) printFlattenOpts() {
 	var preprocessingOption string
 	switch {
-	case g.FlattenOpts.Expand:
+	case opts.FlattenOpts.Expand:
 		preprocessingOption = "expand"
-	case g.FlattenOpts.Minimal:
+	case opts.FlattenOpts.Minimal:
 		preprocessingOption = "minimal flattening"
 	default:
 		preprocessingOption = "full flattening"
