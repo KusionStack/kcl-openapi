@@ -37,7 +37,8 @@ const (
 )
 
 const (
-	intOrStr = "intorstring"
+	intOrStr        = "intorstring"
+	k8sIntOrStrFlag = "x-kubernetes-int-or-string"
 )
 
 // Extensions supported by go-swagger
@@ -215,6 +216,24 @@ func (t *typeResolver) resolveFormat(schema *spec.Schema, isAnonymous bool, isRe
 	return
 }
 
+func (t *typeResolver) resolveExtensions(schema *spec.Schema, isAnonymous bool, isRequired bool) (returns bool, result resolvedType, err error) {
+	if schema.VendorExtensible.Extensions != nil {
+		if value, ok := schema.VendorExtensible.Extensions.GetBool(k8sIntOrStrFlag); value && ok {
+			// the schema has {"x-kubernetes-int-or-string": "true"} flag
+			debugLog("resolving x-kubernetes-int-or-string type flag (anon: %t, req: %t)", isAnonymous, isRequired)
+			returns = true
+			result.SwaggerType = str
+			if len(schema.Type) > 0 {
+				result.SwaggerType = schema.Type[0]
+			}
+			result.KclType = typeMapping[intOrStr]
+			// propagate extensions in resolvedType
+			result.Extensions = schema.Extensions
+		}
+	}
+	return
+}
+
 func (t *typeResolver) firstType(schema *spec.Schema) string {
 	if len(schema.Type) == 0 || schema.Type[0] == "" {
 		return object
@@ -365,6 +384,12 @@ func (t *typeResolver) ResolveSchema(schema *spec.Schema, isAnonymous, isRequire
 	returns, result, err = t.resolveFormat(schema, isAnonymous, isRequired)
 	if returns || err != nil {
 		debugLog("returning after resolve format: %s", pretty.Sprint(result))
+		return
+	}
+
+	returns, result, err = t.resolveExtensions(schema, isAnonymous, isRequired)
+	if returns || err != nil {
+		debugLog("returning after resolve vendor extensions: %s", pretty.Sprint(result))
 		return
 	}
 
