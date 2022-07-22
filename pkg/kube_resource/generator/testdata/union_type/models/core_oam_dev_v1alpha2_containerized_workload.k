@@ -25,9 +25,9 @@ schema ContainerizedWorkload:
 
     __settings__?: {str:str} = {"output_type": "STANDALONE"}
 
-    final apiVersion: str = "core.oam.dev/v1alpha2"
+    apiVersion: "core.oam.dev/v1alpha2" = "core.oam.dev/v1alpha2"
 
-    final kind: str = "ContainerizedWorkload"
+    kind: "ContainerizedWorkload" = "ContainerizedWorkload"
 
     metadata?: apis.ObjectMeta
 
