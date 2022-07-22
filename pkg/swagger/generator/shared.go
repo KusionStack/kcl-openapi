@@ -36,11 +36,6 @@ import (
 
 //go:generate go-bindata -mode 420 -modtime 1482416923 -pkg=generator -ignore=.*\.sw? -ignore=.*\.md ./templates/...
 
-const (
-	// default generation targets structure
-	defaultModelsTarget = "models"
-)
-
 func init() {
 	// all initializations for the generator package
 	debugOptions()
@@ -98,45 +93,45 @@ type GenOpts struct {
 }
 
 // CheckOpts carries out some global consistency checks on options.
-func (g *GenOpts) CheckOpts() error {
-	if g == nil {
+func (opts *GenOpts) CheckOpts() error {
+	if opts == nil {
 		return errors.New("gen opts are required")
 	}
 
 	// check the target path to output the generated files
-	if !filepath.IsAbs(g.Target) {
-		if _, err := filepath.Abs(g.Target); err != nil {
-			return fmt.Errorf("could not locate target path %s: %v", g.Target, err)
+	if !filepath.IsAbs(opts.Target) {
+		if _, err := filepath.Abs(opts.Target); err != nil {
+			return fmt.Errorf("could not locate target path %s: %v", opts.Target, err)
 		}
 	}
 
 	// check the oai spec file exists
-	pth, err := findSwaggerSpec(g.Spec)
+	pth, err := findSwaggerSpec(opts.Spec)
 	if err != nil {
 		return err
 	}
 
 	// ensure spec path is absolute
-	g.Spec, err = filepath.Abs(pth)
+	opts.Spec, err = filepath.Abs(pth)
 	if err != nil {
-		return fmt.Errorf("could not locate spec: %s", g.Spec)
+		return fmt.Errorf("could not locate spec: %s", opts.Spec)
 	}
 
 	return nil
 }
 
-// EnsureDefaults for these gen opts
-func (g *GenOpts) EnsureDefaults() error {
+// EnsureDefaults for the gen opts
+func (opts *GenOpts) EnsureDefaults() error {
 	// default language func: KCL language func
-	if g.LanguageOpts == nil {
-		g.LanguageOpts = DefaultLanguageFunc()
+	if opts.LanguageOpts == nil {
+		opts.LanguageOpts = DefaultLanguageFunc()
 	}
 
 	// default section: set default section name for each section. only model section is used
-	DefaultSectionOpts(g)
+	DefaultSectionOpts(opts)
 
 	// set defaults for flattening options
-	g.FlattenOpts = &analysis.FlattenOpts{
+	opts.FlattenOpts = &analysis.FlattenOpts{
 		Minimal:      true,
 		Verbose:      true,
 		RemoveUnused: false,
@@ -145,7 +140,7 @@ func (g *GenOpts) EnsureDefaults() error {
 	return nil
 }
 
-func (g *GenOpts) location(t *TemplateOpts, data interface{}) (string, string, error) {
+func (opts *GenOpts) location(t *TemplateOpts, data interface{}) (string, string, error) {
 	v := reflect.Indirect(reflect.ValueOf(data))
 	fld := v.FieldByName("Name")
 	var name string
@@ -185,7 +180,7 @@ func (g *GenOpts) location(t *TemplateOpts, data interface{}) (string, string, e
 		useTags = useTagsF.Interface().(bool)
 	}
 
-	funcMap := FuncMapFunc(g.LanguageOpts)
+	funcMap := FuncMapFunc(opts.LanguageOpts)
 
 	pthTpl, err := template.New(t.Name + "-target").Funcs(funcMap).Parse(t.Target)
 	if err != nil {
@@ -205,7 +200,7 @@ func (g *GenOpts) location(t *TemplateOpts, data interface{}) (string, string, e
 	}{
 		Name:    name,
 		Package: pkg,
-		Target:  g.Target,
+		Target:  opts.Target,
 		Tags:    tags,
 		UseTags: useTags,
 		Context: data,
@@ -222,7 +217,7 @@ func (g *GenOpts) location(t *TemplateOpts, data interface{}) (string, string, e
 	return pthBuf.String(), fileName(fNameBuf.String()), nil
 }
 
-func (g *GenOpts) render(t *TemplateOpts, data interface{}) ([]byte, error) {
+func (opts *GenOpts) render(t *TemplateOpts, data interface{}) ([]byte, error) {
 	var templ *template.Template
 
 	if strings.HasPrefix(strings.ToLower(t.Source), "asset:") {
@@ -259,8 +254,8 @@ func (g *GenOpts) render(t *TemplateOpts, data interface{}) ([]byte, error) {
 // generated code is reformatted ("linted"), which gives an
 // additional level of checking. If this step fails, the generated
 // code is still dumped, for template debugging purposes.
-func (g *GenOpts) write(t *TemplateOpts, data interface{}) error {
-	dir, fname, err := g.location(t, data)
+func (opts *GenOpts) write(t *TemplateOpts, data interface{}) error {
+	dir, fname, err := opts.location(t, data)
 	if err != nil {
 		return fmt.Errorf("failed to resolve template location for template %s: %v", t.Name, err)
 	}
@@ -272,7 +267,7 @@ func (g *GenOpts) write(t *TemplateOpts, data interface{}) error {
 	}
 
 	log.Printf("creating generated file %q in %q as %s", fname, dir, t.Name)
-	content, err := g.render(t, data)
+	content, err := opts.render(t, data)
 	if err != nil {
 		return fmt.Errorf("failed rendering template data for %s: %v", t.Name, err)
 	}
@@ -294,7 +289,7 @@ func (g *GenOpts) write(t *TemplateOpts, data interface{}) error {
 	var writeerr error
 
 	if !t.SkipFormat {
-		formatted, err = g.LanguageOpts.FormatContent(filepath.Join(dir, fname), content)
+		formatted, err = opts.LanguageOpts.FormatContent(filepath.Join(dir, fname), content)
 		if err != nil {
 			log.Printf("source formatting failed on template-generated source (%q for %s). Check that your template produces valid code", filepath.Join(dir, fname), t.Name)
 			writeerr = ioutil.WriteFile(filepath.Join(dir, fname), content, 0644)
@@ -318,17 +313,17 @@ func fileName(in string) string {
 	return swag.ToFileName(strings.TrimSuffix(in, ext)) + ext
 }
 
-func (g *GenOpts) renderDefinition(gg *GenDefinition) error {
-	log.Printf("rendering %d templates for model %s", len(g.Sections.Models), gg.Name)
-	for _, templ := range g.Sections.Models {
-		if err := g.write(&templ, gg); err != nil {
+func (opts *GenOpts) renderDefinition(gg *GenDefinition) error {
+	log.Printf("rendering %d templates for model %s", len(opts.Sections.Models), gg.Name)
+	for _, templ := range opts.Sections.Models {
+		if err := opts.write(&templ, gg); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (g *GenOpts) setTemplates() {
+func (opts *GenOpts) setTemplates() {
 	templates.LoadDefaults()
 }
 
